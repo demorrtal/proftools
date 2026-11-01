@@ -1,0 +1,19 @@
+services:
+  task-bot:
+    build: .
+    container_name: telegram_task_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Сохраняем базу данных и логи на хосте, чтобы они не стирались при перезапуске
+      - ./data:/app/data
+      - ./bot.log:/app/bot.log
+    environment:
+      - DATABASE_PATH=/app/data/bot_database.db
+      - TZ=Europe/Moscow
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

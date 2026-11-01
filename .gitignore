@@ -1,0 +1,32 @@
+# Виртуальное окружение Python
+venv/
+env/
+.venv/
+
+# Конфиденциальные данные (токены и конфигурации серверов)
+.env
+deploy_config.txt
+
+# Базы данных SQLite (персональные данные пользователей)
+*.db
+*.sqlite
+*.sqlite3
+bot_database.db
+
+# Файлы логов
+*.log
+bot.log
+
+# Кэш байт-кода Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Настройки редакторов
+.vscode/
+.idea/
+
+# Мусор ОС
+Thumbs.db
+.DS_Store

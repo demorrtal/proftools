@@ -567,7 +567,7 @@ def handle_help(message: types.Message):
 # 2.1 НАЗНАЧЕНИЕ СОБРАНИЯ И ОТМЕТКА ВСЕХ (/all)
 # ==========================================
 
-@bot.message_handler(func=lambda msg: msg.text == "📢 Собрание" or msg.text == "/meeting" or msg.text == "/sobranie")
+@bot.message_handler(func=lambda msg: msg.text in ["📢 Собрание", "Собрание", "/meeting", "/sobranie"])
 def handle_meeting_start(message: types.Message):
     if message.chat.type in ["group", "supergroup"]:
         bot.send_message(
@@ -593,8 +593,8 @@ def handle_meeting_start(message: types.Message):
     }
     bot.send_message(
         message.chat.id,
-        "📢 <b>Назначение общего собрания команды</b>\n\n"
-        "📅 <b>Шаг 1 из 3: Время и дата собрания</b>\n\n"
+        "<b>Назначение общего собрания команды</b>\n\n"
+        "— <b>Шаг 1 из 3: Время и дата собрания</b>\n\n"
         "Укажите, когда состоится собрание.\n"
         "<i>Например:\n"
         "• Завтра в 18:00\n"
@@ -1018,7 +1018,7 @@ def handle_text_messages(message: types.Message):
         bot.send_message(
             message.chat.id,
             f"Принято: <b>{text}</b>\n\n"
-            "📍 <b>Шаг 2 из 3: Место проведения</b>\n\n"
+            "— <b>Шаг 2 из 3: Место проведения</b>\n\n"
             "Укажите место проведения собрания.\n"
             "<i>Например:\n"
             "• Кабинет профбюро (ауд. 320)\n"
@@ -1038,7 +1038,7 @@ def handle_text_messages(message: types.Message):
         bot.send_message(
             message.chat.id,
             f"Принято: <b>{text}</b>\n\n"
-            "📝 <b>Шаг 3 из 3: Повестка собрания</b>\n\n"
+            "— <b>Шаг 3 из 3: Повестка собрания</b>\n\n"
             "Перечислите вопросы повестки (можно каждый пункт с новой строки или через точку с запятой / запятую).\n"
             "Бот автоматически оформит их в аккуратный нумерованный список.\n\n"
             "<i>Например:\n"
@@ -1062,13 +1062,12 @@ def handle_text_messages(message: types.Message):
         is_admin = creator["role"] in ADMIN_ROLES if creator else False
 
         meeting_msg = (
-            "📢 <b>ОБЩЕЕ СОБРАНИЕ КОМАНДЫ</b>\n\n"
-            f"📅 <b>Время:</b> {data['meeting_time']}\n"
-            f"📍 <b>Место:</b> {data['meeting_place']}\n\n"
-            "📋 <b>Повестка дня:</b>\n"
+            "<b>ОБЩЕЕ СОБРАНИЕ КОМАНДЫ</b>\n\n"
+            f"— <b>Время:</b> {data['meeting_time']}\n"
+            f"— <b>Место:</b> {data['meeting_place']}\n\n"
+            "<b>Повестка дня:</b>\n"
             f"{agenda_list}\n\n"
-            f"👤 <b>Организатор:</b> {creator_name} ({creator_role})\n\n"
-            "👍 <b>Поставьте реакцию на это сообщение, если прочитали!</b>"
+            f"— <b>Организатор:</b> {creator_name} ({creator_role})"
         )
 
         user_states.pop(user_id, None)
@@ -1078,12 +1077,12 @@ def handle_text_messages(message: types.Message):
 
         bot.send_message(
             message.chat.id,
-            "✅ <b>Собрание успешно назначено и опубликовано!</b>\n\n"
-            f"📅 <b>Время:</b> {data['meeting_time']}\n"
-            f"📍 <b>Место:</b> {data['meeting_place']}\n\n"
-            "📋 <b>Повестка дня:</b>\n"
+            "<b>Собрание успешно назначено и опубликовано!</b>\n\n"
+            f"— <b>Время:</b> {data['meeting_time']}\n"
+            f"— <b>Место:</b> {data['meeting_place']}\n\n"
+            "<b>Повестка дня:</b>\n"
             f"{agenda_list}\n\n"
-            "📢 Информация отправлена в группу команды и всем участникам в личные сообщения.",
+            "— Информация отправлена в группу команды и всем участникам в личные сообщения.",
             reply_markup=keyboards.get_main_menu(is_admin, creator_role)
         )
         return

@@ -9,8 +9,6 @@ services:
       # Сохраняем базу данных и логи на хосте, чтобы они не стирались при перезапуске
       - ./data:/app/data
       - ./bot.log:/app/bot.log
-    ports:
-      - "8000:8000"
     environment:
       - DATABASE_PATH=/app/data/bot_database.db
       - TZ=Europe/Moscow

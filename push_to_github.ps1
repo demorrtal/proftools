@@ -45,6 +45,24 @@ if (-not $GitCmd) {
 
 Write-Host "[1/4] Git nayden: $GitCmd" -ForegroundColor Gray
 
+# Сохранение ветки miniapp-version перед откатом
+& $GitCmd branch miniapp-version 2>$null
+
+# Очистка корня от дубликатов файлов Mini App (они сохранены в miniapp_backup/)
+$miniappFiles = @("api.py", "run.py", "setup_nginx.sh", "nginx_proftools.conf")
+foreach ($mf in $miniappFiles) {
+    $src = Join-Path $ScriptDir $mf
+    $bak = Join-Path $ScriptDir "miniapp_backup\$mf"
+    if ((Test-Path $src) -and (Test-Path $bak)) {
+        Remove-Item $src -Force -ErrorAction SilentlyContinue
+    }
+}
+$webappDir = Join-Path $ScriptDir "webapp"
+$webappBak = Join-Path $ScriptDir "miniapp_backup\webapp"
+if ((Test-Path $webappDir) -and (Test-Path $webappBak)) {
+    Remove-Item $webappDir -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 # 2. Настройка remote
 $RepoUrl = "https://github.com/demorrtal/proftools.git"
 $currentRemote = & $GitCmd remote get-url origin 2>$null
@@ -75,7 +93,7 @@ if (-not $status) {
 # 4. Ввод сообщения для коммита
 Write-Host ""
 Write-Host "[3/4] Sozdanie kommita..." -ForegroundColor Yellow
-$defaultMsg = "Update bot " + (Get-Date -Format "yyyy-MM-dd HH:mm")
+$defaultMsg = "Save miniapp_backup and restore classic Telegram bot with topics"
 Write-Host "Vvedite opisanie kommita (ili nazhmite Enter dlya '$defaultMsg'):" -ForegroundColor Gray
 $userMsg = Read-Host "> "
 if ([string]::IsNullOrWhiteSpace($userMsg)) {
@@ -84,7 +102,7 @@ if ([string]::IsNullOrWhiteSpace($userMsg)) {
     $commitMsg = $userMsg.Trim()
 }
 
-& $GitCmd add .
+& $GitCmd add -A .
 & $GitCmd commit -m "$commitMsg"
 
 # 5. Push на GitHub
@@ -92,6 +110,7 @@ Write-Host ""
 Write-Host "[4/4] Otpravka na GitHub: $RepoUrl ..." -ForegroundColor Yellow
 & $GitCmd branch -M main
 & $GitCmd push -u origin main
+& $GitCmd push origin miniapp-version 2>$null
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host ""
@@ -101,7 +120,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "========================================================" -ForegroundColor Green
     Write-Host ""
     Write-Host "Na servere Ubuntu obnovite bota komandoy:" -ForegroundColor Gray
-    Write-Host "  ./manage.sh update" -ForegroundColor White
+    Write-Host "  cd /opt/telegram_bot && git fetch origin && git reset --hard origin/main && sudo systemctl restart telegram-bot" -ForegroundColor White
 } else {
     Write-Host ""
     Write-Host "========================================================" -ForegroundColor Red

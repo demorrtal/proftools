@@ -373,7 +373,7 @@ def get_general_settings():
 
 app.mount("/static", StaticFiles(directory=WEBAPP_DIR), name="static")
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def serve_index_page():
     index_path = os.path.join(WEBAPP_DIR, "index.html")
     if os.path.exists(index_path):

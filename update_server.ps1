@@ -51,16 +51,12 @@ Write-Host "[1/3] Сервер назначения: $ServerUser@$ServerIP:$Remo
 # Список файлов с исходным кодом (БЕЗ venv, без базы данных и без логов)
 $FilesToUpload = @(
     "bot.py",
-    "run.py",
-    "api.py",
     "config.py",
     "database.py",
     "keyboards.py",
     "scheduler.py",
     "requirements.txt",
-    "manage.sh",
-    "setup_nginx.sh",
-    "nginx_proftools.conf"
+    "manage.sh"
 )
 
 $ValidFiles = @()
@@ -72,16 +68,11 @@ foreach ($f in $FilesToUpload) {
 }
 
 Write-Host "[2/3] Отправка обновленных файлов на сервер через SCP..." -ForegroundColor Yellow
-Write-Host "  Файлы: $($FilesToUpload -join ', '), webapp/" -ForegroundColor DarkGray
+Write-Host "  Файлы: $($FilesToUpload -join ', ')" -ForegroundColor DarkGray
 Write-Host "  (База данных bot_database.db и .env НЕ перезаписываются - ваши данные в безопасности!)" -ForegroundColor DarkCyan
 
 $scpTarget = "${ServerUser}@${ServerIP}:${RemoteDir}/"
 & scp.exe $ValidFiles $scpTarget
-
-$webappDir = Join-Path $ScriptDir "webapp"
-if (Test-Path $webappDir) {
-    & scp.exe -r $webappDir $scpTarget
-}
 if ($LASTEXITCODE -ne 0) {
     Write-Host "❌ Ошибка при передаче файлов по SCP!" -ForegroundColor Red
     pause

@@ -1,11 +1,8 @@
 from telebot import types
-from config import ROLES, WEBAPP_URL
+from config import ROLES
 
 def get_main_menu(is_admin: bool = False) -> types.ReplyKeyboardMarkup:
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    if WEBAPP_URL:
-        markup.row(types.KeyboardButton("📱 Открыть Mini App", web_app=types.WebAppInfo(url=WEBAPP_URL)))
-
     if is_admin:
         markup.row(types.KeyboardButton("➕ Новая задача"), types.KeyboardButton("📋 Список задач"))
         markup.row(types.KeyboardButton("📌 Мои задачи"), types.KeyboardButton("✅ Выполненные задачи"))
@@ -18,12 +15,6 @@ def get_main_menu(is_admin: bool = False) -> types.ReplyKeyboardMarkup:
         markup.row(types.KeyboardButton("🧹 График уборки"), types.KeyboardButton("📊 План работы профбюро"))
         markup.row(types.KeyboardButton("👤 Мой профиль"), types.KeyboardButton("👥 Список команды"))
     markup.row(types.KeyboardButton("❓ Помощь"))
-    return markup
-
-def get_webapp_inline_keyboard() -> types.InlineKeyboardMarkup:
-    markup = types.InlineKeyboardMarkup()
-    if WEBAPP_URL:
-        markup.add(types.InlineKeyboardButton("📱 Запустить Mini App", web_app=types.WebAppInfo(url=WEBAPP_URL)))
     return markup
 
 def get_cancel_keyboard() -> types.ReplyKeyboardMarkup:

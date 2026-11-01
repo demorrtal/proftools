@@ -20,6 +20,4 @@ COPY . .
 # При остановке контейнера посылаем SIGTERM боту
 STOPSIGNAL SIGTERM
 
-EXPOSE 8000
-
-CMD ["python", "run.py"]
+CMD ["python", "bot.py"]

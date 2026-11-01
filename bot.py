@@ -75,8 +75,33 @@ def parse_deadline(text: str) -> datetime | None:
 # 1. СТАРТ И РЕГИСТРАЦИЯ
 # ==========================================
 
+@bot.message_handler(commands=["clear_menu", "hide_menu"])
+def handle_clear_menu(message: types.Message):
+    """Скрытие кнопок меню в группе для всех участников"""
+    bot.send_message(
+        message.chat.id,
+        "🧹 <b>Меню и кнопки бота скрыты для всех участников этого чата.</b>\n"
+        "Для работы с задачами перейдите в личные сообщения с ботом.",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+
 @bot.message_handler(commands=["start"])
 def handle_start(message: types.Message):
+    if message.chat.type in ["group", "supergroup"]:
+        bot_username = ""
+        try:
+            bot_username = f"@{bot.get_me().username}"
+        except Exception:
+            pass
+        bot.send_message(
+            message.chat.id,
+            f"👋 Бот в группе используется только для оповещений по общим задачам.\n\n"
+            f"Чтобы открыть личное меню и управлять задачами, "
+            f"перейдите в личные сообщения с ботом: {bot_username}",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+        return
+
     user_id = message.from_user.id
     user = db.get_user(user_id)
 
@@ -353,7 +378,8 @@ def handle_set_group(message: types.Message):
         message.chat.id,
         f"✅ <b>Группа успешно привязана!</b>\n\n"
         f"Чат: <b>{chat_title}</b> (ID: <code>{chat_id}</code>)\n"
-        f"Теперь все задачи и дедлайны с назначением <b>'ВСЕ'</b> будут автоматически приходить сюда."
+        f"Теперь все задачи и дедлайны с назначением <b>'ВСЕ'</b> будут автоматически приходить сюда.",
+        reply_markup=types.ReplyKeyboardRemove()
     )
 
 @bot.message_handler(func=lambda msg: msg.text == "❓ Помощь" or msg.text == "/help")
@@ -478,6 +504,10 @@ def handle_tasks_list(message: types.Message):
 
 @bot.message_handler(content_types=["text"])
 def handle_text_messages(message: types.Message):
+    if message.chat.type in ["group", "supergroup"]:
+        # В группах игнорируем обычный текстовый чат, не шлем меню
+        return
+
     user_id = message.from_user.id
     text = message.text.strip()
 
@@ -1061,6 +1091,27 @@ def handle_callbacks(call: types.CallbackQuery):
 if __name__ == "__main__":
     logger.info("Запуск Telegram-бота...")
     db.init_db()
+
+    # Отключаем отображение команд бота в группах, настраиваем только для ЛС
+    try:
+        bot.delete_my_commands(scope=types.BotCommandScopeAllGroupChats())
+        bot.set_my_commands(
+            commands=[
+                types.BotCommand("start", "Главное меню"),
+                types.BotCommand("my_tasks", "Мои задачи"),
+                types.BotCommand("tasks", "Список задач (Председатель)"),
+                types.BotCommand("new_task", "Новая задача (Председатель)"),
+                types.BotCommand("cleaning", "График уборки"),
+                types.BotCommand("workplan", "План работы профбюро"),
+                types.BotCommand("profile", "Мой профиль"),
+                types.BotCommand("team", "Список команды"),
+                types.BotCommand("help", "Справка")
+            ],
+            scope=types.BotCommandScopeAllPrivateChats()
+        )
+        logger.info("Команды бота настроены исключительно для личных диалогов.")
+    except Exception as e:
+        logger.warning(f"Не удалось настроить scopes команд: {e}")
 
     # Запускаем фоновый поток контроля дедлайнов (каждые 45 сек)
     start_scheduler_thread(bot)

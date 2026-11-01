@@ -27,6 +27,7 @@ __pycache__/
 .vscode/
 .idea/
 
-# Мусор ОС
+# Мусор ОС и тесты
 Thumbs.db
 .DS_Store
+test_ps.ps1

@@ -26,10 +26,13 @@ echo "👤 Пользователь службы: $ACTUAL_USER"
 echo ""
 
 # 2. Обновление пакетов и установка зависимостей Ubuntu 24
-echo "🔄 [1/5] Установка системных пакетов (Python 3.12, venv, pip, curl)..."
+echo "🔄 [1/5] Установка системных пакетов (Python 3.12, venv, pip, curl, git)..."
 export DEBIAN_FRONTEND=noninteractive
 apt update -y
-apt install -y python3 python3-venv python3-pip curl tzdata
+apt install -y python3 python3-venv python3-pip curl tzdata git
+
+# Настройка git safe.directory для исключения конфликтов прав
+git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
 
 # Настройка таймзоны (по умолчанию Europe/Moscow)
 if [ ! -f /etc/timezone ] || ! grep -q "Europe/Moscow" /etc/timezone; then

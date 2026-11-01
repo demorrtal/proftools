@@ -1,0 +1,40 @@
+name: Deploy Telegram Bot to Ubuntu 24.04 Server
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT || 22 }}
+          script: |
+            echo "🚀 Начало автоматического деплоя из https://github.com/demorrtal/proftools..."
+            cd /opt/telegram_bot || cd /home/${{ secrets.SERVER_USER }}/telegram_bot || exit 1
+            
+            # Подтягиваем свежий код из репозитория
+            git fetch origin
+            git reset --hard origin/main || git pull origin main || git pull
+            
+            # Обновляем зависимости
+            if [ -d "venv" ]; then
+              ./venv/bin/pip install -r requirements.txt --upgrade
+            fi
+            
+            # Перезапускаем службу
+            sudo systemctl restart telegram-bot.service
+            
+            # Проверяем статус
+            sleep 2
+            sudo systemctl is-active telegram-bot.service && echo "✅ Бот успешно обновлен и работает!"

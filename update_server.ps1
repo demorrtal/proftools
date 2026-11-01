@@ -79,8 +79,8 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Write-Host "[3/3] Перезапуск службы telegram-bot на сервере..." -ForegroundColor Yellow
-$remoteCommand = "sudo systemctl restart telegram-bot && sleep 1 && sudo systemctl is-active telegram-bot"
+Write-Host "[3/3] Синхронизация и перезапуск службы telegram-bot на сервере..." -ForegroundColor Yellow
+$remoteCommand = "cd ${RemoteDir} && (git pull origin main 2>/dev/null || true) && sudo systemctl restart telegram-bot && sleep 1 && sudo systemctl is-active telegram-bot"
 & ssh.exe "${ServerUser}@${ServerIP}" $remoteCommand
 
 if ($LASTEXITCODE -eq 0) {

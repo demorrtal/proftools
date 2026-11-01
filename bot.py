@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import telebot
 from telebot import types
 
-from config import BOT_TOKEN, ROLES, ADMIN_ROLES, CLEANING_ROLES, GENERAL_CHAT_ID
+from config import BOT_TOKEN, ROLES, ADMIN_ROLES, CLEANING_ROLES, GENERAL_CHAT_ID, WEBAPP_URL
 import database as db
 import keyboards
 from scheduler import start_scheduler_thread, send_notification
@@ -1262,6 +1262,23 @@ def handle_callbacks(call: types.CallbackQuery):
         )
         return
 
+@bot.message_handler(commands=["app", "webapp"])
+def handle_app_command(message: types.Message):
+    """Открыть Telegram Mini App"""
+    if WEBAPP_URL:
+        bot.send_message(
+            message.chat.id,
+            "📱 <b>Telegram Mini App Proftools</b>\n\n"
+            "Нажмите кнопку ниже для запуска полноэкранного приложения:",
+            reply_markup=keyboards.get_webapp_inline_keyboard()
+        )
+    else:
+        bot.send_message(
+            message.chat.id,
+            "ℹ️ <b>Mini App еще не подключен</b>\n\n"
+            "Для подключения укажите <code>WEBAPP_URL</code> (HTTPS-ссылку на ваше приложение) в файле <code>.env</code>."
+        )
+
 # ==========================================
 # ТОЧКА ВХОДА
 # ==========================================
@@ -1275,6 +1292,7 @@ if __name__ == "__main__":
         bot.set_my_commands(
             commands=[
                 types.BotCommand("start", "Главное меню"),
+                types.BotCommand("app", "Открыть Mini App"),
                 types.BotCommand("my_tasks", "Мои задачи"),
                 types.BotCommand("tasks", "Список задач (Председатель)"),
                 types.BotCommand("new_task", "Новая задача (Председатель)"),
@@ -1288,8 +1306,18 @@ if __name__ == "__main__":
             scope=types.BotCommandScopeAllPrivateChats()
         )
         logger.info("Команды бота настроены исключительно для личных диалогов.")
+
+        # Настраиваем главную кнопку WebApp внизу экрана (Menu Button слева от ввода)
+        if WEBAPP_URL:
+            bot.set_chat_menu_button(
+                menu_button=types.MenuButtonWebApp(
+                    text="📱 Приложение",
+                    web_app=types.WebAppInfo(url=WEBAPP_URL)
+                )
+            )
+            logger.info(f"Кнопка MenuButtonWebApp настроена на URL: {WEBAPP_URL}")
     except Exception as e:
-        logger.warning(f"Не удалось настроить scopes команд: {e}")
+        logger.warning(f"Не удалось настроить scopes/menu_button: {e}")
 
     # Запускаем фоновый поток контроля дедлайнов (каждые 45 сек)
     start_scheduler_thread(bot)

@@ -10,7 +10,7 @@ User=root
 WorkingDirectory=/opt/telegram_bot
 Environment="PYTHONUNBUFFERED=1"
 Environment="TZ=Europe/Moscow"
-ExecStart=/opt/telegram_bot/venv/bin/python /opt/telegram_bot/bot.py
+ExecStart=/opt/telegram_bot/venv/bin/python /opt/telegram_bot/run.py
 Restart=always
 RestartSec=5
 TimeoutStopSec=10

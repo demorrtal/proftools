@@ -25,6 +25,14 @@ if GENERAL_TOPIC_ID:
 # Путь к базе данных SQLite
 DATABASE_PATH = os.getenv("DATABASE_PATH", "bot_database.db")
 
+# Настройки Telegram Mini App (Web App)
+WEBAPP_URL = os.getenv("WEBAPP_URL", "").strip()
+WEBAPP_HOST = os.getenv("WEBAPP_HOST", "0.0.0.0").strip()
+WEBAPP_PORT = int(os.getenv("WEBAPP_PORT", "8000"))
+
+# Ссылка на Google Таблицу с планом работы профбюро
+WORKPLAN_URL = os.getenv("WORKPLAN_URL", "https://docs.google.com/spreadsheets/").strip()
+
 # Список из 11 официальных должностей
 ROLES = [
     "Председатель",

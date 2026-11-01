@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Proftools - Задачи и дедлайны</title>
+  <!-- Telegram Web App SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="user-profile" id="userProfileHeader">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <div class="user-meta">
+          <div class="user-name" id="userName">Загрузка...</div>
+          <div class="user-role-badge" id="userRoleBadge">Профиль</div>
+        </div>
+      </div>
+      <button class="icon-btn" id="refreshBtn" title="Обновить">🔄</button>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="app-content">
+
+      <!-- 1. ТАБ: ЗАДАЧИ -->
+      <section id="tab-tasks" class="tab-pane active">
+        <!-- Фильтры задач -->
+        <div class="filter-bar">
+          <button class="filter-pill active" data-filter="active">В работе</button>
+          <button class="filter-pill" data-filter="my">Мои задачи</button>
+          <button class="filter-pill" data-filter="completed">Выполненные</button>
+        </div>
+
+        <!-- Список карточек -->
+        <div class="tasks-container" id="tasksList">
+          <div class="loading-spinner">Загрузка задач...</div>
+        </div>
+      </section>
+
+      <!-- 2. ТАБ: СОЗДАНИЕ ЗАДАЧИ (Только Председатель) -->
+      <section id="tab-create" class="tab-pane">
+        <div class="card">
+          <h2 class="card-title">➕ Новая задача</h2>
+          
+          <div class="form-group">
+            <label class="form-label">Суть задачи</label>
+            <textarea id="taskTitleInput" class="form-input" rows="3" placeholder="Что необходимо сделать?"></textarea>
+          </div>
+
+          <div class="form-group">
+            <div class="label-with-hint">
+              <label class="form-label">Кому назначить</label>
+              <button type="button" class="btn-text" id="toggleAllRolesBtn">Выбрать ВСЕ</button>
+            </div>
+            <div class="roles-selection-grid" id="rolesGrid">
+              <!-- Роли генерируются через JS -->
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Дедлайн</label>
+            <input type="datetime-local" id="taskDeadlineInput" class="form-input">
+          </div>
+
+          <button id="submitTaskBtn" class="btn btn-primary btn-block">🚀 Опубликовать задачу</button>
+        </div>
+      </section>
+
+      <!-- 3. ТАБ: ГРАФИК УБОРКИ -->
+      <section id="tab-cleaning" class="tab-pane">
+        <div class="card">
+          <div class="card-header-actions">
+            <h2 class="card-title">🧹 График уборки</h2>
+            <button id="openAddCleaningBtn" class="btn btn-sm btn-primary">➕ Добавить</button>
+          </div>
+          <div id="cleaningList" class="cleaning-container">
+            <div class="loading-spinner">Загрузка дат...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. ТАБ: КОМАНДА -->
+      <section id="tab-team" class="tab-pane">
+        <div class="card">
+          <h2 class="card-title">👥 Команда и должности</h2>
+          <div class="team-container" id="teamList">
+            <div class="loading-spinner">Загрузка команды...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. ТАБ: НАСТРОЙКИ И ТЕМЫ -->
+      <section id="tab-settings" class="tab-pane">
+        <div class="card">
+          <h2 class="card-title">⚙️ Настройки и темы</h2>
+          
+          <div class="settings-block">
+            <label class="form-label">Тема форума для задач «ВСЕ»</label>
+            <p class="hint-text">Выберите топик, куда бот будет слать задачи для всей команды:</p>
+            <div id="topicsSelector" class="topics-radio-list">
+              <div class="loading-spinner">Загрузка тем...</div>
+            </div>
+          </div>
+
+          <div class="settings-divider"></div>
+
+          <div class="settings-block">
+            <label class="form-label">План работы профбюро</label>
+            <a id="workplanLink" href="#" target="_blank" class="btn btn-secondary btn-block">📊 Открыть Google Таблицу</a>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" data-tab="tab-tasks">
+        <span class="nav-icon">📋</span>
+        <span class="nav-label">Задачи</span>
+      </button>
+      <button class="nav-item admin-only" data-tab="tab-create" id="navCreateBtn">
+        <span class="nav-icon">➕</span>
+        <span class="nav-label">Создать</span>
+      </button>
+      <button class="nav-item" data-tab="tab-cleaning">
+        <span class="nav-icon">🧹</span>
+        <span class="nav-label">Уборка</span>
+      </button>
+      <button class="nav-item" data-tab="tab-team">
+        <span class="nav-icon">👥</span>
+        <span class="nav-label">Команда</span>
+      </button>
+      <button class="nav-item" data-tab="tab-settings">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">Инфо</span>
+      </button>
+    </nav>
+
+    <!-- MODAL: Регистрация нового сотрудника -->
+    <div id="registerModal" class="modal-overlay">
+      <div class="modal-content">
+        <h2 class="modal-title">👋 Регистрация в команде</h2>
+        <p class="modal-subtitle">Заполните профиль для работы с задачами:</p>
+
+        <div class="form-group">
+          <label class="form-label">Имя</label>
+          <input type="text" id="regFirstName" class="form-input" placeholder="Иван">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Фамилия</label>
+          <input type="text" id="regLastName" class="form-input" placeholder="Иванов">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Учебная группа</label>
+          <input type="text" id="regGroup" class="form-input" placeholder="ИУ9-51Б">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Должность (свободные)</label>
+          <select id="regRoleSelect" class="form-input">
+            <!-- Роли генерируются через JS -->
+          </select>
+        </div>
+
+        <button id="submitRegBtn" class="btn btn-primary btn-block">Завершить регистрацию</button>
+      </div>
+    </div>
+
+    <!-- MODAL: Продление дедлайна -->
+    <div id="extendModal" class="modal-overlay">
+      <div class="modal-content">
+        <h2 class="modal-title">⏳ Продление дедлайна</h2>
+        <p class="modal-subtitle" id="extendTaskTitle">Задача</p>
+
+        <div class="form-group">
+          <label class="form-label">Новый срок</label>
+          <input type="datetime-local" id="extendDeadlineInput" class="form-input">
+        </div>
+
+        <div class="modal-actions">
+          <button id="cancelExtendBtn" class="btn btn-secondary">Отмена</button>
+          <button id="confirmExtendBtn" class="btn btn-primary">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: Добавить уборку -->
+    <div id="cleaningModal" class="modal-overlay">
+      <div class="modal-content">
+        <h2 class="modal-title">🧹 Новая дата уборки</h2>
+
+        <div class="form-group">
+          <label class="form-label">Дата (например: 15.11.2026)</label>
+          <input type="text" id="newCleaningDateInput" class="form-input" placeholder="15.11.2026">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Комментарий (необязательно)</label>
+          <input type="text" id="newCleaningCommentInput" class="form-input" placeholder="Генеральная уборка">
+        </div>
+
+        <div class="modal-actions">
+          <button id="cancelCleaningBtn" class="btn btn-secondary">Отмена</button>
+          <button id="confirmCleaningBtn" class="btn btn-primary">Добавить</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

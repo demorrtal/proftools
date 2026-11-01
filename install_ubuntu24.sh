@@ -111,7 +111,7 @@ Group=$ACTUAL_USER
 WorkingDirectory=$APP_DIR
 Environment="PYTHONUNBUFFERED=1"
 Environment="TZ=Europe/Moscow"
-ExecStart=$APP_DIR/venv/bin/python $APP_DIR/bot.py
+ExecStart=$APP_DIR/venv/bin/python $APP_DIR/run.py
 Restart=always
 RestartSec=5
 TimeoutStopSec=10

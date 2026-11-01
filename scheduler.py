@@ -2,12 +2,12 @@ import logging
 import time
 from datetime import datetime, timedelta
 import database as db
-from config import GENERAL_CHAT_ID
+from config import GENERAL_CHAT_ID, GENERAL_TOPIC_ID
 
 logger = logging.getLogger(__name__)
 
 def send_notification(bot, target_roles: list[str] | str, text: str):
-    """Отправка уведомления: в общий чат (если ВСЕ) или в ЛС по должностям"""
+    """Отправка уведомления: в общий чат/тему (если ВСЕ) или в ЛС по должностям"""
     is_all = (target_roles == "ALL" or "ALL" in target_roles)
 
     if is_all:
@@ -15,10 +15,31 @@ def send_notification(bot, target_roles: list[str] | str, text: str):
         target_chat_id = chat_id_db or GENERAL_CHAT_ID
 
         if target_chat_id:
+            topic_id_db = db.get_setting("general_topic_id")
+            thread_id = None
+            if topic_id_db is not None and str(topic_id_db).strip() != "":
+                try:
+                    thread_id = int(str(topic_id_db).strip())
+                except ValueError:
+                    thread_id = None
+            elif GENERAL_TOPIC_ID:
+                thread_id = GENERAL_TOPIC_ID
+
             try:
-                bot.send_message(chat_id=int(target_chat_id), text=text, parse_mode="HTML")
+                bot.send_message(
+                    chat_id=int(target_chat_id),
+                    text=text,
+                    parse_mode="HTML",
+                    message_thread_id=thread_id
+                )
             except Exception as e:
-                logger.warning(f"Не удалось отправить в общий чат {target_chat_id}: {e}")
+                logger.warning(f"Не удалось отправить в общий чат {target_chat_id} (тема {thread_id}): {e}")
+                # Если отправка в топик завершилась ошибкой (например тема удалена), шлем в общий чат
+                if thread_id is not None:
+                    try:
+                        bot.send_message(chat_id=int(target_chat_id), text=text, parse_mode="HTML")
+                    except Exception as e2:
+                        logger.warning(f"Повторная отправка в чат без темы также не удалась: {e2}")
 
         # Дублируем зарегистрированным пользователям в ЛС
         users = db.get_all_users()

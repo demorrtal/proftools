@@ -72,6 +72,15 @@ def init_db():
                 created_at TEXT NOT NULL
             )
         """)
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS forum_topics (
+                thread_id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                chat_id TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
         conn.commit()
     logger.info("База данных SQLite успешно инициализирована.")
 
@@ -300,4 +309,41 @@ def delete_cleaning_date(schedule_id: int):
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM cleaning_schedule WHERE id = ?", (schedule_id,))
+        conn.commit()
+
+# --- Темы (топики) супергруппы для задач ВСЕ ---
+
+def save_forum_topic(thread_id: int, title: str, chat_id: str):
+    """Сохранить или обновить тему форума"""
+    now = datetime.now().isoformat()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO forum_topics (thread_id, title, chat_id, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(thread_id) DO UPDATE SET title = excluded.title, chat_id = excluded.chat_id
+        """, (thread_id, title, str(chat_id), now))
+        conn.commit()
+
+def get_forum_topics():
+    """Получить список всех зарегистрированных тем"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM forum_topics ORDER BY created_at ASC")
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+def get_forum_topic(thread_id: int):
+    """Получить информацию о конкретной теме"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM forum_topics WHERE thread_id = ?", (thread_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def delete_forum_topic(thread_id: int):
+    """Удалить тему из списка"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM forum_topics WHERE thread_id = ?", (thread_id,))
         conn.commit()

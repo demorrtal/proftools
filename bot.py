@@ -367,19 +367,124 @@ def handle_set_group(message: types.Message):
 
     user = db.get_user(message.from_user.id)
     if not user or user["role"] not in ADMIN_ROLES:
-        bot.send_message(message.chat.id, "⛔ Привязать общий чат может только Председатель.")
+        bot.send_message(message.chat.id, "⛔ Привязать общий чат может только Председатель.", reply_markup=types.ReplyKeyboardRemove())
         return
 
     chat_id = str(message.chat.id)
     chat_title = message.chat.title or "Общий чат"
     db.set_setting("general_chat_id", chat_id)
 
+    thread_id = getattr(message, "message_thread_id", None)
+    if thread_id:
+        db.set_setting("general_topic_id", str(thread_id))
+        db.save_forum_topic(thread_id, "Основная тема", chat_id)
+        topic_info = f"\n📌 <b>Тема форума:</b> ID <code>{thread_id}</code> (задачи будут отправляться прямо сюда!)"
+    else:
+        topic_info = "\n📌 <b>Тема форума:</b> Основной раздел (без темы)."
+
     bot.send_message(
         message.chat.id,
         f"✅ <b>Группа успешно привязана!</b>\n\n"
-        f"Чат: <b>{chat_title}</b> (ID: <code>{chat_id}</code>)\n"
-        f"Теперь все задачи и дедлайны с назначением <b>'ВСЕ'</b> будут автоматически приходить сюда.",
+        f"👥 Чат: <b>{chat_title}</b> (ID: <code>{chat_id}</code>){topic_info}\n\n"
+        f"Теперь все задачи и дедлайны с назначением <b>'ВСЕ'</b> будут автоматически приходить сюда.\n"
+        f"<i>💡 Чтобы назначить конкретную тему форума, отправьте <code>/set_topic [Название]</code> внутри нужной ветки.</i>",
+        message_thread_id=thread_id,
         reply_markup=types.ReplyKeyboardRemove()
+    )
+
+@bot.message_handler(commands=["set_topic"])
+def handle_set_topic(message: types.Message):
+    """Привязка конкретной темы форума для задач 'ВСЕ'"""
+    if message.chat.type not in ["group", "supergroup"]:
+        bot.send_message(
+            message.chat.id,
+            "⚠️ Команду <code>/set_topic</code> нужно отправлять <b>внутри группы команды (в нужной теме форума)</b>."
+        )
+        return
+
+    user = db.get_user(message.from_user.id)
+    if not user or user["role"] not in ADMIN_ROLES:
+        bot.send_message(message.chat.id, "⛔ Настраивать тему задач может только Председатель.", reply_markup=types.ReplyKeyboardRemove())
+        return
+
+    chat_id = str(message.chat.id)
+    chat_title = message.chat.title or "Общий чат"
+    db.set_setting("general_chat_id", chat_id)
+
+    thread_id = getattr(message, "message_thread_id", None)
+
+    # Извлекаем кастомное название темы (если введено /set_topic Задачи)
+    parts = message.text.split(maxsplit=1)
+    custom_title = parts[1].strip() if len(parts) > 1 else ""
+
+    if thread_id:
+        topic_title = custom_title if custom_title else f"Тема #{thread_id}"
+        db.save_forum_topic(thread_id, topic_title, chat_id)
+        db.set_setting("general_topic_id", str(thread_id))
+
+        bot.send_message(
+            message.chat.id,
+            f"✅ <b>Тема для задач 'ВСЕ' успешно установлена!</b>\n\n"
+            f"📌 Название темы: <b>{topic_title}</b>\n"
+            f"🔢 ID темы: <code>{thread_id}</code>\n"
+            f"👥 Группа: <b>{chat_title}</b>\n\n"
+            f"Теперь все задачи для всей команды (<b>'ВСЕ'</b>) и напоминания по ним будут публиковаться прямо в эту ветку форума.\n\n"
+            f"<i>Для сброса привязки отправьте команду /reset_topic</i>",
+            message_thread_id=thread_id,
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+    else:
+        db.set_setting("general_topic_id", "")
+        bot.send_message(
+            message.chat.id,
+            f"ℹ️ Команда вызвана в основном разделе группы <b>{chat_title}</b> (без темы).\n\n"
+            f"Задачи для <b>'ВСЕ'</b> будут отправляться в общий раздел группы.\n"
+            f"Если в группе включены темы, зайдите в нужный топик (ветку) и отправьте команду <code>/set_topic [Название]</code> там.",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+
+@bot.message_handler(commands=["reset_topic"])
+def handle_reset_topic(message: types.Message):
+    """Сброс темы форума для задач 'ВСЕ'"""
+    user = db.get_user(message.from_user.id)
+    if not user or user["role"] not in ADMIN_ROLES:
+        bot.send_message(message.chat.id, "⛔ Сбросить тему может только Председатель.")
+        return
+
+    db.set_setting("general_topic_id", "")
+    bot.send_message(
+        message.chat.id,
+        "🔄 <b>Привязка к теме форума сброшена.</b>\n"
+        "Задачи для всей команды ('ВСЕ') теперь будут приходить в общий чат группы (без выбора конкретной темы).",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+
+@bot.message_handler(func=lambda msg: msg.text == "📌 Тема в группе (ВСЕ)" or msg.text == "/topics")
+def handle_topics_menu(message: types.Message):
+    """Меню выбора активной темы для Председателя"""
+    user = db.get_user(message.from_user.id)
+    if not user or user["role"] not in ADMIN_ROLES:
+        bot.send_message(message.chat.id, "⛔ Управление темами группы доступно только Председателю.")
+        return
+
+    chat_id = db.get_setting("general_chat_id")
+    current_topic_id = db.get_setting("general_topic_id")
+    topics = db.get_forum_topics()
+
+    active_title = "Основной чат (без темы)"
+    if current_topic_id and str(current_topic_id).strip() != "":
+        current_obj = db.get_forum_topic(int(current_topic_id)) if str(current_topic_id).isdigit() else None
+        active_title = f"{current_obj['title']} (ID: {current_topic_id})" if current_obj else f"ID {current_topic_id}"
+
+    chat_info = f"<code>{chat_id}</code>" if chat_id else "<i>не привязана (используйте /set_group в группе)</i>"
+
+    bot.send_message(
+        message.chat.id,
+        f"📌 <b>Выбор темы в группе для задач 'ВСЕ'</b>\n\n"
+        f"👥 <b>Привязанная группа:</b> {chat_info}\n"
+        f"🎯 <b>Текущая активная тема:</b> <b>{active_title}</b>\n\n"
+        f"Выберите тему из списка ниже нажатием кнопки (отмечена галочкой ✅), либо добавьте новую прямо из группы:",
+        reply_markup=keyboards.get_topics_keyboard(topics, current_topic_id)
     )
 
 @bot.message_handler(func=lambda msg: msg.text == "❓ Помощь" or msg.text == "/help")
@@ -395,7 +500,10 @@ def handle_help(message: types.Message):
             "✅ <code>/completed_tasks</code> — архив выполненных задач\n"
             "🧹 <code>/cleaning</code> — график уборки кабинета (добавление/удаление дат)\n"
             "🗑️ <code>/remove_user</code> — снять человека с должности\n"
-            "👥 <code>/set_group</code> — отправьте в групповой чат для привязки\n"
+            "👥 <code>/set_group</code> — привязать группу (отправьте в чате группы)\n"
+            "📌 <code>/set_topic [Название]</code> — привязать тему форума (отправьте в топике)\n"
+            "🔄 <code>/reset_topic</code> — сбросить тему (слать в общий чат)\n"
+            "⚙️ <code>/topics</code> — выбор активной темы форума для задач ВСЕ\n"
         )
     bot.send_message(
         message.chat.id,
@@ -635,12 +743,18 @@ def handle_text_messages(message: types.Message):
         user_states.pop(user_id, None)
         is_admin = creator["role"] in ADMIN_ROLES if creator else True
         target_display = "ВСЕ" if ("ALL" in selected_roles or selected_roles == "ALL") else ", ".join(selected_roles)
+        target_confirm = target_display
+        if "ALL" in selected_roles or selected_roles == "ALL":
+            topic_id = db.get_setting("general_topic_id")
+            topic_obj = db.get_forum_topic(int(topic_id)) if (topic_id and str(topic_id).isdigit()) else None
+            top_name = f"<b>{topic_obj['title']}</b>" if topic_obj else (f"ID <code>{topic_id}</code>" if topic_id else "Основной чат")
+            target_confirm = f"ВСЕ <i>(опубликовано в: {top_name})</i>"
 
         bot.send_message(
             message.chat.id,
             f"✅ <b>Задача успешно создана!</b>\n\n"
             f"📝 <b>Задача:</b> {task_text}\n"
-            f"👥 <b>Кому:</b> {target_display}\n"
+            f"👥 <b>Кому:</b> {target_confirm}\n"
             f"⏰ <b>Дедлайн:</b> {deadline_display}",
             reply_markup=keyboards.get_main_menu(is_admin)
         )
@@ -837,10 +951,17 @@ def handle_callbacks(call: types.CallbackQuery):
             except Exception:
                 pass
 
-            roles_display = "ВСЕ" if ("ALL" in selected_roles or selected_roles == "ALL") else ", ".join(selected_roles)
+            if "ALL" in selected_roles or selected_roles == "ALL":
+                topic_id = db.get_setting("general_topic_id")
+                topic_obj = db.get_forum_topic(int(topic_id)) if (topic_id and str(topic_id).isdigit()) else None
+                top_name = f"<b>{topic_obj['title']}</b>" if topic_obj else (f"ID <code>{topic_id}</code>" if topic_id else "Основной раздел (без темы)")
+                roles_display = f"ВСЕ <i>(будет опубликовано в: {top_name})</i>"
+            else:
+                roles_display = ", ".join(selected_roles)
+
             bot.send_message(
                 call.message.chat.id,
-                f"🎯 Выбрано: <b>{roles_display}</b>\n\n"
+                f"🎯 Выбрано: {roles_display}\n\n"
                 "⏰ <b>Шаг 3 из 3: Дедлайн задачи</b>\n\n"
                 "Введите дату и время дедлайна в формате:\n"
                 "• <code>25.11.2026 18:00</code> (дата и время)\n"
@@ -1085,6 +1206,62 @@ def handle_callbacks(call: types.CallbackQuery):
         bot.answer_callback_query(call.id, "Отменено.")
         return
 
+    # Выбор активной темы для задач ВСЕ
+    if data_str.startswith("set_active_topic:"):
+        user = db.get_user(user_id)
+        if not user or user["role"] not in ADMIN_ROLES:
+            bot.answer_callback_query(call.id, "⛔ Доступно только Председателю.", show_alert=True)
+            return
+
+        choice = data_str.split(":")[1]
+        if choice == "none":
+            db.set_setting("general_topic_id", "")
+            bot.answer_callback_query(call.id, "Выбран Основной чат (без темы)")
+        else:
+            db.set_setting("general_topic_id", choice)
+            top_obj = db.get_forum_topic(int(choice)) if choice.isdigit() else None
+            top_name = top_obj["title"] if top_obj else f"ID {choice}"
+            bot.answer_callback_query(call.id, f"Выбрана тема: {top_name}")
+
+        # Обновляем инлайн-кнопки
+        chat_id = db.get_setting("general_chat_id")
+        current_topic_id = db.get_setting("general_topic_id")
+        topics = db.get_forum_topics()
+
+        active_title = "Основной чат (без темы)"
+        if current_topic_id and str(current_topic_id).strip() != "":
+            current_obj = db.get_forum_topic(int(current_topic_id)) if str(current_topic_id).isdigit() else None
+            active_title = f"{current_obj['title']} (ID: {current_topic_id})" if current_obj else f"ID {current_topic_id}"
+
+        chat_info = f"<code>{chat_id}</code>" if chat_id else "<i>не привязана</i>"
+        try:
+            bot.edit_message_text(
+                f"📌 <b>Выбор темы в группе для задач 'ВСЕ'</b>\n\n"
+                f"👥 <b>Привязанная группа:</b> {chat_info}\n"
+                f"🎯 <b>Текущая активная тема:</b> <b>{active_title}</b>\n\n"
+                f"Выберите тему из списка ниже нажатием кнопки (отмечена галочкой ✅), либо добавьте новую прямо из группы:",
+                call.message.chat.id,
+                call.message.message_id,
+                reply_markup=keyboards.get_topics_keyboard(topics, current_topic_id)
+            )
+        except Exception:
+            pass
+        return
+
+    # Справка по добавлению темы
+    if data_str == "topic:help":
+        bot.answer_callback_query(call.id)
+        bot.send_message(
+            call.message.chat.id,
+            "💡 <b>Как добавить тему (топик) форума в этот список:</b>\n\n"
+            "1. Зайдите в супергруппу вашей команды.\n"
+            "2. Откройте нужную ветку/топик (например, 'Задачи' или 'Дедлайны').\n"
+            "3. Отправьте прямо в эту ветку команду:\n"
+            "👉 <code>/set_topic Название темы</code>\n\n"
+            "Бот автоматически считает ID этой ветки, сохранит её с указанным названием и добавит в кнопки быстрого выбора!"
+        )
+        return
+
 # ==========================================
 # ТОЧКА ВХОДА
 # ==========================================
@@ -1101,6 +1278,7 @@ if __name__ == "__main__":
                 types.BotCommand("my_tasks", "Мои задачи"),
                 types.BotCommand("tasks", "Список задач (Председатель)"),
                 types.BotCommand("new_task", "Новая задача (Председатель)"),
+                types.BotCommand("topics", "Тема в группе (Председатель)"),
                 types.BotCommand("cleaning", "График уборки"),
                 types.BotCommand("workplan", "План работы профбюро"),
                 types.BotCommand("profile", "Мой профиль"),

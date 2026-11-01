@@ -9,6 +9,7 @@ def get_main_menu(is_admin: bool = False) -> types.ReplyKeyboardMarkup:
         markup.row(types.KeyboardButton("🧹 График уборки"), types.KeyboardButton("📊 План работы профбюро"))
         markup.row(types.KeyboardButton("👤 Мой профиль"), types.KeyboardButton("👥 Список команды"))
         markup.row(types.KeyboardButton("🗑️ Снять с должности"), types.KeyboardButton("➕ Добавить в группу"))
+        markup.row(types.KeyboardButton("📌 Тема в группе (ВСЕ)"))
     else:
         markup.row(types.KeyboardButton("📌 Мои задачи"))
         markup.row(types.KeyboardButton("🧹 График уборки"), types.KeyboardButton("📊 План работы профбюро"))
@@ -118,4 +119,30 @@ def get_delete_cleaning_keyboard(dates: list) -> types.InlineKeyboardMarkup:
         btn_text = f"❌ {d['cleaning_date']}{comment_part}"
         markup.add(types.InlineKeyboardButton(text=btn_text, callback_data=f"clean:del:{d['id']}"))
     markup.add(types.InlineKeyboardButton(text="Отмена", callback_data="clean:cancel"))
+    return markup
+
+def get_topics_keyboard(topics: list[dict], current_topic_id: str | int | None = None) -> types.InlineKeyboardMarkup:
+    """Клавиатура выбора активной темы для задач ВСЕ"""
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    cur_id_str = str(current_topic_id).strip() if current_topic_id is not None and str(current_topic_id).strip() != "" else None
+
+    # Кнопка для Основного чата (без темы)
+    is_general_active = cur_id_str is None
+    gen_mark = "✅ " if is_general_active else "◻️ "
+    markup.add(types.InlineKeyboardButton(
+        text=f"{gen_mark}💬 Основной чат / без темы",
+        callback_data="set_active_topic:none"
+    ))
+
+    # Кнопки для каждой темы
+    for t in topics:
+        tid_str = str(t["thread_id"])
+        is_active = (tid_str == cur_id_str)
+        mark = "✅ " if is_active else "◻️ "
+        markup.add(types.InlineKeyboardButton(
+            text=f"{mark}📌 {t['title']} (ID: {t['thread_id']})",
+            callback_data=f"set_active_topic:{t['thread_id']}"
+        ))
+
+    markup.add(types.InlineKeyboardButton(text="ℹ️ Как добавить новую тему", callback_data="topic:help"))
     return markup

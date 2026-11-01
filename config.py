@@ -14,6 +14,14 @@ if GENERAL_CHAT_ID:
     except ValueError:
         pass
 
+# ID темы (форум-топика) для задач "ВСЕ" (необязательно, можно настроить командой /set_topic в группе)
+GENERAL_TOPIC_ID = os.getenv("GENERAL_TOPIC_ID")
+if GENERAL_TOPIC_ID:
+    try:
+        GENERAL_TOPIC_ID = int(GENERAL_TOPIC_ID.strip())
+    except ValueError:
+        GENERAL_TOPIC_ID = None
+
 # Путь к базе данных SQLite
 DATABASE_PATH = os.getenv("DATABASE_PATH", "bot_database.db")
 

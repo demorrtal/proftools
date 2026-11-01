@@ -1,15 +1,20 @@
 from telebot import types
-from config import ROLES
+from config import ROLES, LEADERSHIP_ROLES
 
-def get_main_menu(is_admin: bool = False) -> types.ReplyKeyboardMarkup:
+def get_main_menu(is_admin: bool = False, role: str = "") -> types.ReplyKeyboardMarkup:
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    can_lead = is_admin or (role in LEADERSHIP_ROLES)
     if is_admin:
         markup.row(types.KeyboardButton("➕ Новая задача"), types.KeyboardButton("📋 Список задач"))
-        markup.row(types.KeyboardButton("📌 Мои задачи"), types.KeyboardButton("✅ Выполненные задачи"))
+        markup.row(types.KeyboardButton("📢 Собрание"), types.KeyboardButton("📌 Мои задачи"))
+        markup.row(types.KeyboardButton("✅ Выполненные задачи"), types.KeyboardButton("🧹 График уборки"))
+        markup.row(types.KeyboardButton("📊 План работы профбюро"), types.KeyboardButton("👤 Мой профиль"))
+        markup.row(types.KeyboardButton("👥 Список команды"), types.KeyboardButton("🗑️ Снять с должности"))
+        markup.row(types.KeyboardButton("📌 Тема в группе (ВСЕ)"), types.KeyboardButton("➕ Добавить в группу"))
+    elif can_lead:
+        markup.row(types.KeyboardButton("📢 Собрание"), types.KeyboardButton("📌 Мои задачи"))
         markup.row(types.KeyboardButton("🧹 График уборки"), types.KeyboardButton("📊 План работы профбюро"))
         markup.row(types.KeyboardButton("👤 Мой профиль"), types.KeyboardButton("👥 Список команды"))
-        markup.row(types.KeyboardButton("🗑️ Снять с должности"), types.KeyboardButton("➕ Добавить в группу"))
-        markup.row(types.KeyboardButton("📌 Тема в группе (ВСЕ)"))
     else:
         markup.row(types.KeyboardButton("📌 Мои задачи"))
         markup.row(types.KeyboardButton("🧹 График уборки"), types.KeyboardButton("📊 План работы профбюро"))

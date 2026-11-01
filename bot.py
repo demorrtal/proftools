@@ -3,11 +3,12 @@ from logging.handlers import RotatingFileHandler
 import os
 import signal
 import sys
+import re
 from datetime import datetime, timedelta
 import telebot
 from telebot import types
 
-from config import BOT_TOKEN, ROLES, ADMIN_ROLES, CLEANING_ROLES, GENERAL_CHAT_ID
+from config import BOT_TOKEN, ROLES, ADMIN_ROLES, CLEANING_ROLES, GENERAL_CHAT_ID, LEADERSHIP_ROLES
 import database as db
 import keyboards
 from scheduler import start_scheduler_thread, send_notification
@@ -71,6 +72,25 @@ def parse_deadline(text: str) -> datetime | None:
             continue
     return None
 
+def format_agenda_list(raw_text: str) -> str:
+    """Оформление повестки собрания в виде аккуратного нумерованного списка"""
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    if len(lines) == 1 and (";" in lines[0] or ("," in lines[0] and len(lines[0].split(",")) > 1)):
+        sep = ";" if ";" in lines[0] else ","
+        parts = [p.strip() for p in lines[0].split(sep) if p.strip()]
+        if len(parts) > 1:
+            lines = parts
+
+    formatted_items = []
+    for idx, item in enumerate(lines, 1):
+        cleaned = re.sub(r"^(\d+[\.\)]\s*|[-•*]\s*)", "", item).strip()
+        if cleaned:
+            formatted_items.append(f"{idx}. {cleaned}")
+
+    if not formatted_items:
+        return raw_text
+    return "\n".join(formatted_items)
+
 # ==========================================
 # 1. СТАРТ И РЕГИСТРАЦИЯ
 # ==========================================
@@ -102,6 +122,12 @@ def handle_start(message: types.Message):
         )
         return
 
+    # Принудительно сбрасываем кнопку Menu слева от ввода на стандартные команды
+    try:
+        bot.set_chat_menu_button(chat_id=message.chat.id, menu_button=types.MenuButtonCommands())
+    except Exception:
+        pass
+
     user_id = message.from_user.id
     user = db.get_user(user_id)
 
@@ -115,7 +141,7 @@ def handle_start(message: types.Message):
             f"💼 Ваша должность: <b>{user['role']}</b>{grp_note}\n"
             f"🔗 Telegram: @{user['username'] or 'не указан'}{admin_note}\n\n"
             f"Используйте кнопки меню внизу для работы.",
-            reply_markup=keyboards.get_main_menu(is_admin)
+            reply_markup=keyboards.get_main_menu(is_admin, user["role"])
         )
         return
 
@@ -207,7 +233,7 @@ def handle_completed_tasks(message: types.Message):
         target_display = "ВСЕ" if (t["target_roles"] == "ALL" or "ALL" in t["target_roles"]) else ", ".join(t["target_roles"])
 
         msg_text = (
-            f"✅ <b>Задача #{t['id']} (ВЫПОЛНЕНА)</b>\n\n"
+            f"✅ <b>Задача (ВЫПОЛНЕНА)</b>\n\n"
             f"📝 <b>Суть:</b> {t['title']}\n"
             f"👥 <b>Было назначено:</b> {target_display}\n"
             f"⏰ <b>Дедлайн был:</b> {deadline_str}\n"
@@ -337,7 +363,7 @@ def handle_profile(message: types.Message):
         f"🔗 <b>Telegram:</b> @{user['username'] or 'не указан'}\n"
         f"🆔 <b>ID пользователя:</b> <code>{user['user_id']}</code>\n\n"
         f"<i>Для изменения данных введите /reregister</i>",
-        reply_markup=keyboards.get_main_menu(is_admin)
+        reply_markup=keyboards.get_main_menu(is_admin, user["role"])
     )
 
 @bot.message_handler(func=lambda msg: msg.text == "👥 Список команды" or msg.text == "/team")
@@ -490,7 +516,18 @@ def handle_topics_menu(message: types.Message):
 @bot.message_handler(func=lambda msg: msg.text == "❓ Помощь" or msg.text == "/help")
 def handle_help(message: types.Message):
     user = db.get_user(message.from_user.id)
-    is_admin = user["role"] in ADMIN_ROLES if user else False
+    user_role = user["role"] if user else ""
+    is_admin = user_role in ADMIN_ROLES
+    can_lead = user_role in LEADERSHIP_ROLES
+
+    leadership_help = ""
+    if can_lead:
+        leadership_help = (
+            "\n<b>Команды руководства (Председатель и 1-й зам):</b>\n"
+            "📢 <code>/meeting</code> — назначить собрание (время, место, повестка списком)\n"
+            "👥 <code>/all [сообщение]</code> — отметить всех участников команды в чате\n"
+        )
+
     admin_help = ""
     if is_admin:
         admin_help = (
@@ -512,6 +549,7 @@ def handle_help(message: types.Message):
         "1. Каждый участник при первом входе выбирает свою должность из 11 доступных.\n"
         "2. Председатель ставит задачи конкретным должностям или ВСЕМ.\n"
         "3. Бот автоматически напоминает о дедлайнах за 5, 3 и 1 день, а при просрочке срочно оповещает исполнителя и Председателя.\n"
+        f"{leadership_help}"
         f"{admin_help}\n"
         "<b>Общие команды:</b>\n"
         "📌 <code>/my_tasks</code> — просмотр ваших личных задач\n"
@@ -522,8 +560,126 @@ def handle_help(message: types.Message):
         "➕ <code>/add_to_group</code> — ссылка для добавления бота в группу\n"
         "🔄 <code>/reregister</code> — сменить имя/должность\n"
         "❓ <code>/help</code> — эта справка",
-        reply_markup=keyboards.get_main_menu(is_admin)
+        reply_markup=keyboards.get_main_menu(is_admin, user_role)
     )
+
+# ==========================================
+# 2.1 НАЗНАЧЕНИЕ СОБРАНИЯ И ОТМЕТКА ВСЕХ (/all)
+# ==========================================
+
+@bot.message_handler(func=lambda msg: msg.text == "📢 Собрание" or msg.text == "/meeting" or msg.text == "/sobranie")
+def handle_meeting_start(message: types.Message):
+    if message.chat.type in ["group", "supergroup"]:
+        bot.send_message(
+            message.chat.id,
+            "⚠️ Назначать собрание необходимо в личных сообщениях с ботом, чтобы пошагово заполнить все данные.",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+        return
+
+    user_id = message.from_user.id
+    user = db.get_user(user_id)
+
+    if not user or user["role"] not in LEADERSHIP_ROLES:
+        bot.send_message(
+            message.chat.id,
+            "⛔ Назначать собрания могут только <b>Председатель</b> и <b>1-й заместитель</b>."
+        )
+        return
+
+    user_states[user_id] = {
+        "step": "waiting_meeting_time",
+        "data": {}
+    }
+    bot.send_message(
+        message.chat.id,
+        "📢 <b>Назначение общего собрания команды</b>\n\n"
+        "📅 <b>Шаг 1 из 3: Время и дата собрания</b>\n\n"
+        "Укажите, когда состоится собрание.\n"
+        "<i>Например:\n"
+        "• Завтра в 18:00\n"
+        "• 05.11 (среда) в 17:30\n"
+        "• Сегодня в 16:00</i>",
+        reply_markup=keyboards.get_cancel_keyboard()
+    )
+
+@bot.message_handler(commands=["all", "tagall", "everyone", "все"])
+def handle_mention_all(message: types.Message):
+    """Отметка всех участников команды в чате (только Председатель и 1-й заместитель)"""
+    user_id = message.from_user.id
+    user = db.get_user(user_id)
+
+    if not user or user["role"] not in LEADERSHIP_ROLES:
+        bot.reply_to(
+            message,
+            "⛔ Команду отметки всех участников (<code>/all</code>) могут использовать только <b>Председатель</b> и <b>1-й заместитель</b>."
+        )
+        return
+
+    users = db.get_all_users()
+    if not users:
+        bot.reply_to(message, "⚠️ В базе бота пока нет зарегистрированных участников команды.")
+        return
+
+    parts = message.text.split(maxsplit=1)
+    custom_text = parts[1].strip() if len(parts) > 1 else ""
+
+    mentions = []
+    for u in users:
+        if u.get("username"):
+            mention_link = f"@{u['username']}"
+        else:
+            mention_link = f"<a href=\"tg://user?id={u['user_id']}\">{u['first_name']}</a>"
+        mentions.append(f"• <b>{u['role']}:</b> {mention_link}")
+
+    sender_name = f"{user['first_name']} {user['last_name']} ({user['role']})"
+    header_text = f"📢 <b>ВНИМАНИЕ ВСЕЙ КОМАНДЕ!</b>\n👤 <i>От: {sender_name}</i>\n"
+    body_text = f"\n💬 <b>Сообщение:</b>\n{custom_text}\n" if custom_text else ""
+    mentions_block = "\n👥 <b>Отметка участников:</b>\n" + "\n".join(mentions)
+
+    full_message = f"{header_text}{body_text}{mentions_block}"
+
+    if message.chat.type in ["group", "supergroup"]:
+        reply_to_id = message.reply_to_message.message_id if message.reply_to_message else None
+        thread_id = getattr(message, "message_thread_id", None)
+        try:
+            bot.send_message(
+                chat_id=message.chat.id,
+                text=full_message,
+                reply_to_message_id=reply_to_id,
+                message_thread_id=thread_id
+            )
+        except Exception as e:
+            logger.error(f"Ошибка отправки /all в группе: {e}")
+            bot.send_message(message.chat.id, full_message)
+    else:
+        chat_id_db = db.get_setting("general_chat_id")
+        target_chat_id = chat_id_db or GENERAL_CHAT_ID
+        if target_chat_id:
+            topic_id_db = db.get_setting("general_topic_id")
+            thread_id = None
+            if topic_id_db and str(topic_id_db).strip().isdigit():
+                thread_id = int(str(topic_id_db).strip())
+
+            try:
+                bot.send_message(
+                    chat_id=int(target_chat_id),
+                    text=full_message,
+                    message_thread_id=thread_id
+                )
+                bot.send_message(
+                    message.chat.id,
+                    "✅ <b>Сообщение с отметкой всей команды успешно отправлено в общую группу!</b>",
+                    reply_markup=keyboards.get_main_menu(user["role"] in ADMIN_ROLES, user["role"])
+                )
+            except Exception as e:
+                bot.send_message(message.chat.id, f"⚠️ Не удалось отправить в группу: {e}")
+        else:
+            bot.send_message(
+                message.chat.id,
+                "ℹ️ Команда <code>/all</code> предназначена для использования <b>внутри группы команды</b>.\n"
+                "Чтобы привязать группу, отправьте команду <code>/set_group</code> в нужном чате."
+            )
 
 # ==========================================
 # 3. ДОБАВЛЕНИЕ ЗАДАЧИ (Только Председатель)
@@ -623,8 +779,9 @@ def handle_text_messages(message: types.Message):
     if text == "❌ Отмена":
         user_states.pop(user_id, None)
         user = db.get_user(user_id)
-        is_admin = user["role"] in ADMIN_ROLES if user else False
-        bot.send_message(message.chat.id, "Действие отменено.", reply_markup=keyboards.get_main_menu(is_admin))
+        user_role = user["role"] if user else ""
+        is_admin = user_role in ADMIN_ROLES
+        bot.send_message(message.chat.id, "Действие отменено.", reply_markup=keyboards.get_main_menu(is_admin, user_role))
         return
 
     state_info = user_states.get(user_id)
@@ -756,7 +913,7 @@ def handle_text_messages(message: types.Message):
             f"📝 <b>Задача:</b> {task_text}\n"
             f"👥 <b>Кому:</b> {target_confirm}\n"
             f"⏰ <b>Дедлайн:</b> {deadline_display}",
-            reply_markup=keyboards.get_main_menu(is_admin)
+            reply_markup=keyboards.get_main_menu(is_admin, creator_role)
         )
 
         # Рассылка оповещения о новой задаче
@@ -790,7 +947,7 @@ def handle_text_messages(message: types.Message):
         bot.send_message(
             message.chat.id,
             f"✅ Дата уборки <b>{date_part}</b>{comment_display} успешно добавлена в график!",
-            reply_markup=keyboards.get_main_menu(is_admin=is_admin)
+            reply_markup=keyboards.get_main_menu(is_admin=is_admin, role=user["role"] if user else "")
         )
         return
 
@@ -839,7 +996,7 @@ def handle_text_messages(message: types.Message):
             message.chat.id,
             f"✅ <b>Дедлайн по задаче #{task_id} успешно продлен!</b>\n\n"
             f"⏰ Новый дедлайн: <b>{new_deadline_display}</b>",
-            reply_markup=keyboards.get_main_menu(is_admin)
+            reply_markup=keyboards.get_main_menu(is_admin, admin_role)
         )
 
         extend_msg = (
@@ -849,6 +1006,86 @@ def handle_text_messages(message: types.Message):
             f"👤 <b>Продлил:</b> {admin_name} ({admin_role})"
         )
         send_notification(bot, task["target_roles"], extend_msg)
+        return
+
+    # Шаг 1 создания собрания: Время
+    elif step == "waiting_meeting_time":
+        if len(text) < 2:
+            bot.send_message(message.chat.id, "⚠️ Время и дата не могут быть пустыми. Попробуйте еще раз:")
+            return
+        data["meeting_time"] = text
+        user_states[user_id] = {"step": "waiting_meeting_place", "data": data}
+        bot.send_message(
+            message.chat.id,
+            f"Принято: <b>{text}</b>\n\n"
+            "📍 <b>Шаг 2 из 3: Место проведения</b>\n\n"
+            "Укажите место проведения собрания.\n"
+            "<i>Например:\n"
+            "• Кабинет профбюро (ауд. 320)\n"
+            "• Ауд. 502л\n"
+            "• Онлайн в Discord / Telegram</i>",
+            reply_markup=keyboards.get_cancel_keyboard()
+        )
+        return
+
+    # Шаг 2 создания собрания: Место
+    elif step == "waiting_meeting_place":
+        if len(text) < 2:
+            bot.send_message(message.chat.id, "⚠️ Место проведения не может быть пустым. Попробуйте еще раз:")
+            return
+        data["meeting_place"] = text
+        user_states[user_id] = {"step": "waiting_meeting_agenda", "data": data}
+        bot.send_message(
+            message.chat.id,
+            f"Принято: <b>{text}</b>\n\n"
+            "📝 <b>Шаг 3 из 3: Повестка собрания</b>\n\n"
+            "Перечислите вопросы повестки (можно каждый пункт с новой строки или через точку с запятой / запятую).\n"
+            "Бот автоматически оформит их в аккуратный нумерованный список.\n\n"
+            "<i>Например:\n"
+            "1. Подготовка ко Дню первокурсника\n"
+            "2. Утверждение плана мероприятий\n"
+            "3. Разное</i>",
+            reply_markup=keyboards.get_cancel_keyboard()
+        )
+        return
+
+    # Шаг 3 создания собрания: Повестка дня
+    elif step == "waiting_meeting_agenda":
+        if len(text) < 2:
+            bot.send_message(message.chat.id, "⚠️ Повестка не может быть пустой. Напишите вопросы повестки:")
+            return
+
+        agenda_list = format_agenda_list(text)
+        creator = db.get_user(user_id)
+        creator_name = f"{creator['first_name']} {creator['last_name']}" if creator else message.from_user.full_name
+        creator_role = creator["role"] if creator else "Руководство"
+        is_admin = creator["role"] in ADMIN_ROLES if creator else False
+
+        meeting_msg = (
+            "📢 <b>ОБЩЕЕ СОБРАНИЕ КОМАНДЫ</b>\n\n"
+            f"📅 <b>Время:</b> {data['meeting_time']}\n"
+            f"📍 <b>Место:</b> {data['meeting_place']}\n\n"
+            "📋 <b>Повестка дня:</b>\n"
+            f"{agenda_list}\n\n"
+            f"👤 <b>Организатор:</b> {creator_name} ({creator_role})\n\n"
+            "👍 <b>Поставьте реакцию на это сообщение, если прочитали!</b>"
+        )
+
+        user_states.pop(user_id, None)
+
+        # Рассылка оповещения в группу команды и всем участникам в ЛС
+        send_notification(bot, "ALL", meeting_msg)
+
+        bot.send_message(
+            message.chat.id,
+            "✅ <b>Собрание успешно назначено и опубликовано!</b>\n\n"
+            f"📅 <b>Время:</b> {data['meeting_time']}\n"
+            f"📍 <b>Место:</b> {data['meeting_place']}\n\n"
+            "📋 <b>Повестка дня:</b>\n"
+            f"{agenda_list}\n\n"
+            "📢 Информация отправлена в группу команды и всем участникам в личные сообщения.",
+            reply_markup=keyboards.get_main_menu(is_admin, creator_role)
+        )
         return
 
 # ==========================================
@@ -913,7 +1150,7 @@ def handle_callbacks(call: types.CallbackQuery):
             f"🔗 <b>Telegram:</b> @{username or 'нет'}\n"
             f"{perks}\n\n"
             f"Бот будет напоминать вам о дедлайнах за 5, 3 и 1 день, а также в случае просрочки.",
-            reply_markup=keyboards.get_main_menu(is_admin)
+            reply_markup=keyboards.get_main_menu(is_admin, selected_role)
         )
         bot.answer_callback_query(call.id, "Регистрация завершена!")
         return
@@ -935,8 +1172,9 @@ def handle_callbacks(call: types.CallbackQuery):
             except Exception:
                 pass
             user = db.get_user(user_id)
-            is_admin = user["role"] in ADMIN_ROLES if user else True
-            bot.send_message(call.message.chat.id, "Создание задачи отменено.", reply_markup=keyboards.get_main_menu(is_admin))
+            user_role = user["role"] if user else ""
+            is_admin = user_role in ADMIN_ROLES
+            bot.send_message(call.message.chat.id, "Создание задачи отменено.", reply_markup=keyboards.get_main_menu(is_admin, user_role))
             bot.answer_callback_query(call.id)
             return
 
@@ -1023,11 +1261,11 @@ def handle_callbacks(call: types.CallbackQuery):
         except Exception:
             pass
 
-        bot.answer_callback_query(call.id, f"Задача #{task_id} отмечена как выполненная!")
+        bot.answer_callback_query(call.id, "Задача отмечена как выполненная!")
 
         # Оповещаем исполнителей
         done_msg = (
-            f"✅ <b>ЗАДАЧА #{task_id} ВЫПОЛНЕНА!</b>\n\n"
+            f"✅ <b>ЗАДАЧА ВЫПОЛНЕНА!</b>\n\n"
             f"📝 {task['title']}\n\n"
             f"🎉 Председатель отметил задачу как успешно закрытую."
         )
@@ -1276,6 +1514,8 @@ if __name__ == "__main__":
             commands=[
                 types.BotCommand("start", "Главное меню"),
                 types.BotCommand("my_tasks", "Мои задачи"),
+                types.BotCommand("meeting", "Назначить собрание (Руководство)"),
+                types.BotCommand("all", "Отметить всех в чате (Руководство)"),
                 types.BotCommand("tasks", "Список задач (Председатель)"),
                 types.BotCommand("new_task", "Новая задача (Председатель)"),
                 types.BotCommand("topics", "Тема в группе (Председатель)"),
@@ -1288,8 +1528,12 @@ if __name__ == "__main__":
             scope=types.BotCommandScopeAllPrivateChats()
         )
         logger.info("Команды бота настроены исключительно для личных диалогов.")
+
+        # Сбрасываем кнопку меню слева от ввода сообщения на стандартное меню команд ("Меню")
+        bot.set_chat_menu_button(menu_button=types.MenuButtonCommands())
+        logger.info("Кнопка меню чата (Menu Button) успешно сброшена на стандартные команды.")
     except Exception as e:
-        logger.warning(f"Не удалось настроить scopes команд: {e}")
+        logger.warning(f"Не удалось настроить scopes/menu_button: {e}")
 
     # Запускаем фоновый поток контроля дедлайнов (каждые 45 сек)
     start_scheduler_thread(bot)

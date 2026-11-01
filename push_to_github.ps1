@@ -45,6 +45,24 @@ if (-not $GitCmd) {
 
 Write-Host "[1/4] Git nayden: $GitCmd" -ForegroundColor Gray
 
+# Сброс кнопки меню в Telegram API на стандартное меню команд
+try {
+    $envFile = Join-Path $ScriptDir ".env"
+    if (Test-Path $envFile) {
+        $tokenMatch = Select-String -Path $envFile -Pattern "^BOT_TOKEN=(.+)"
+        if ($tokenMatch) {
+            $botTok = $tokenMatch.Matches[0].Groups[1].Value.Trim().Trim('"').Trim("'")
+            if ($botTok -and $botTok -notmatch "1234567890") {
+                $body = '{"menu_button":{"type":"commands"}}'
+                $res = Invoke-RestMethod -Uri "https://api.telegram.org/bot$botTok/setChatMenuButton" -Method Post -ContentType "application/json" -Body $body -ErrorAction SilentlyContinue
+                if ($res.ok) {
+                    Write-Host "[OK] Knopka 'Prilozhenie' sbroshena v Telegram API na standartnoe 'Menyu'!" -ForegroundColor Green
+                }
+            }
+        }
+    }
+} catch {}
+
 # Сохранение ветки miniapp-version перед откатом
 & $GitCmd branch miniapp-version 2>$null
 
